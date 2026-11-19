@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Smart Gate – Guard Scanner</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'accent-blue':   '#3b82f6',
+            'accent-cyan':   '#06b6d4',
+            'accent-emerald':'#10b981',
+            'accent-red':    '#ef4444',
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- html5-qrcode v2.3.8 CDN -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body {
+      background-color: #030712;
+      background-image:
+        linear-gradient(rgba(16,185,129,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(16,185,129,.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      overscroll-behavior: none;
+    }
+
+    /* ── Bento card ── */
+    .bento {
+      background: rgba(17,24,39,.82);
+      border: 1px solid rgba(31,41,55,.90);
+      border-radius: 1.5rem;
+      backdrop-filter: blur(18px);
+    }
+
+    /* ── Gradient text ── */
+    .g-text {
+      background: linear-gradient(130deg,#10b981,#06b6d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── Scanner DOM overrides ── */
+    #reader { border-radius: 1.25rem !important; overflow: hidden !important; }
+    #reader video { border-radius: 1.25rem !important; }
+    #reader__scan_region { border-radius: 1.25rem !important; }
+    #html5-qrcode-anchor-scan-type-change,
+    #reader__dashboard_section_swaplink,
+    #reader__dashboard_section_fileselect { display: none !important; }
+
+    /* Viewfinder corners */
+    .vf-corner { position:absolute; width:22px; height:22px; border-color:#10b981; border-style:solid; }
+    .vf-tl{top:0;left:0;border-width:3px 0 0 3px;border-radius:6px 0 0 0;}
+    .vf-tr{top:0;right:0;border-width:3px 3px 0 0;border-radius:0 6px 0 0;}
+    .vf-bl{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 6px;}
+    .vf-br{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 6px 0;}
+
+    /* Scan sweep */
+    @keyframes sweep{0%{top:6px;opacity:1}90%{top:calc(100% - 6px);opacity:1}100%{top:calc(100% - 6px);opacity:0}}
+    .scan-line{position:absolute;left:8px;right:8px;height:2px;background:linear-gradient(90deg,transparent,#10b981,transparent);border-radius:9999px;animation:sweep 2s ease-in-out infinite;box-shadow:0 0 10px #10b981;}
+
+    /* ── Banner ── */
+    .banner{border-radius:1.5rem;padding:1.5rem;transition:all .4s cubic-bezier(.34,1.56,.64,1);}
+    .banner-exit   {background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.40);box-shadow:0 0 50px rgba(16,185,129,.18),inset 0 0 60px rgba(16,185,129,.04);}
+    .banner-return {background:rgba(59,130,246,.10);border:1px solid rgba(59,130,246,.40);box-shadow:0 0 50px rgba(59,130,246,.18),inset 0 0 60px rgba(59,130,246,.04);}
+    .banner-error  {background:rgba(239,68,68,.10); border:1px solid rgba(239,68,68,.40); box-shadow:0 0 40px rgba(239,68,68,.15);}
+
+    @keyframes scaleIn{0%{transform:scale(.84);opacity:0}100%{transform:scale(1);opacity:1}}
+    .scale-in{animation:scaleIn .4s cubic-bezier(.34,1.56,.64,1) forwards;}
+
+    @keyframes pulseRing{0%{transform:scale(1);opacity:.5}100%{transform:scale(1.7);opacity:0}}
+    .pulse-ring{position:absolute;inset:0;border-radius:9999px;animation:pulseRing 1.5s ease-out infinite;}
+
+    /* ── Input ── */
+    .field{background:rgba(3,7,18,.7);border:1px solid rgba(55,65,81,.7);border-radius:.75rem;color:#e5e7eb;transition:border-color .2s,box-shadow .2s;width:100%;padding:.6rem 1rem;font-size:.875rem;}
+    .field:focus{outline:none;border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.15);}
+
+    /* ── Buttons ── */
+    .btn-green{background:linear-gradient(135deg,#059669,#0891b2);border-radius:1rem;font-weight:600;color:#fff;transition:all .2s;}
+    .btn-green:hover{box-shadow:0 0 28px rgba(16,185,129,.5);}
+    .btn-green:active{transform:scale(.98);}
+    .btn-outline{border:1px solid rgba(55,65,81,.8);border-radius:1rem;font-weight:600;color:#9ca3af;background:rgba(17,24,39,.6);transition:all .2s;}
+    .btn-outline:hover{border-color:rgba(16,185,129,.5);color:#34d399;}
+    .btn-blue{background:linear-gradient(135deg,#2563eb,#0891b2);border-radius:1rem;font-weight:600;color:#fff;transition:all .2s;}
+    .btn-blue:hover{box-shadow:0 0 28px rgba(59,130,246,.5);}
+
+    /* ── Log pill ── */
+    .log-pill{display:inline-flex;align-items:center;gap:.35rem;font-size:.7rem;font-weight:700;letter-spacing:.06em;padding:.2rem .7rem;border-radius:9999px;}
+    .lp-approved{background:rgba(16,185,129,.12);color:#34d399;border:1px solid rgba(16,185,129,.25);}
+    .lp-exited  {background:rgba(59,130,246,.12); color:#60a5fa;border:1px solid rgba(59,130,246,.25);}
+    .lp-returned{background:rgba(139,92,246,.12); color:#a78bfa;border:1px solid rgba(139,92,246,.25);}
+    .lp-error   {background:rgba(239,68,68,.12);  color:#f87171;border:1px solid rgba(239,68,68,.25);}
+
+    /* ── Chip ── */
+    .chip{background:rgba(3,7,18,.65);border:1px solid rgba(55,65,81,.7);border-radius:.875rem;padding:.55rem .9rem;}
+    .chip-label{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;margin-bottom:.15rem;}
+    .chip-value{font-size:.8rem;font-weight:600;color:#e5e7eb;}
+
+    /* ── Spinner ── */
+    .spin{border:3px solid rgba(255,255,255,.1);border-top-color:#10b981;border-radius:50%;width:18px;height:18px;animation:rot .7s linear infinite;display:inline-block;}
+    @keyframes rot{to{transform:rotate(360deg)}}
+  </style>
+</head>
+
+<body class="min-h-screen text-gray-100 font-sans antialiased select-none">
+
+  <!-- Inject from Lambda env -->
+  <script>const API_BASE_URL = "{{EC2_API_URL}}";</script>
+
+  <!-- ── Navbar ── -->
+  <nav class="sticky top-0 z-50 border-b border-gray-800/60 bg-gray-950/90 backdrop-blur-xl">
+    <div class="px-5 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-9 w-9 rounded-xl bg-emerald-600/20 ring-1 ring-emerald-500/40 flex items-center justify-center">
+          <svg class="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882V15.118a1 1 0 01-1.447.894L15 14M3 8h12v8H3a1 1 0 01-1-1V9a1 1 0 011-1z"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-semibold text-gray-200">Guard Scanner</p>
+          <p class="text-[10px] text-gray-500">Main Gate · Amity University</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 rounded-full border border-gray-800 bg-gray-900/60 px-3 py-1.5">
+        <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-[11px] text-gray-400 font-medium">LIVE</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Main ── -->
+  <main class="mx-auto max-w-md px-4 py-6 space-y-5 pb-16">
+
+    <div class="text-center">
+      <h1 class="text-2xl font-extrabold">Gate <span class="g-text">QR Scanner</span></h1>
+      <p class="text-xs text-gray-500 mt-1">Point the camera at the student's pass, or enter the Pass ID manually.</p>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         BOX 1 · Camera Scanner + Manual Input
+    ══════════════════════════════════════ -->
+    <div class="bento p-4 space-y-4">
+
+      <!-- Camera viewfinder -->
+      <div class="relative overflow-hidden rounded-2xl bg-gray-900">
+        <div id="reader" class="w-full"></div>
+        <!-- Overlay -->
+        <div id="vf-overlay" class="pointer-events-none absolute inset-0 hidden">
+          <div class="vf-corner vf-tl"></div>
+          <div class="vf-corner vf-tr"></div>
+          <div class="vf-corner vf-bl"></div>
+          <div class="vf-corner vf-br"></div>
+          <div class="scan-line"></div>
+        </div>
+        <!-- Idle placeholder -->
+        <div id="idle-ph" class="flex flex-col items-center justify-center gap-3 py-16 text-center">
+          <div class="rounded-2xl bg-gray-800/70 p-5">
+            <svg class="h-10 w-10 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </div>
+          <p class="text-sm text-gray-400">Camera inactive</p>
+          <p class="text-xs text-gray-600">Grant camera permission when prompted</p>
+        </div>
+      </div>
+
+      <!-- Camera buttons -->
+      <div class="flex gap-3">
+        <button id="start-btn"  onclick="startScanner()"  class="btn-green flex-1 px-5 py-2.5 text-sm">Activate Camera</button>
+        <button id="stop-btn"   onclick="stopScanner()"   class="btn-outline hidden px-5 py-2.5 text-sm">Stop</button>
+        <button id="again-btn"  onclick="resetScanner()"  class="btn-blue hidden flex-1 px-5 py-2.5 text-sm">Scan Next Student</button>
+      </div>
+
+      <!-- Divider -->
+      <div class="flex items-center gap-3">
+        <div class="flex-1 border-t border-gray-800"></div>
+        <span class="text-xs text-gray-600">or enter manually</span>
+        <div class="flex-1 border-t border-gray-800"></div>
+      </div>
+
+      <!-- Manual Pass ID input -->
+      <form id="manual-form" class="flex gap-3" novalidate>
+        <input id="manual-pid" type="text" class="field flex-1"
+               placeholder="e.g. OUT-A20405224045-1700000000000" />
+        <button type="submit" class="btn-green px-5 py-2.5 text-sm flex-shrink-0">
+          <span id="manual-btn-label">Verify</span>
+        </button>
+      </form>
+
+      <!-- Error msg -->
+      <p id="scan-err" class="hidden rounded-xl border border-red-900/50 bg-red-950/40 px-4 py-2 text-xs text-red-400 text-center"></p>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         BOX 2 · Verification Banner
+    ══════════════════════════════════════ -->
+    <div id="banner-box" class="hidden scale-in">
+      <div id="main-banner" class="banner">
+
+        <!-- Icon + headline -->
+        <div class="flex items-start gap-4">
+          <div class="relative flex-shrink-0 mt-0.5">
+            <div id="banner-ring" class="pulse-ring"></div>
+            <div id="banner-icon" class="relative z-10 flex h-12 w-12 items-center justify-center rounded-full text-2xl"></div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p id="banner-ev-label" class="text-[10px] font-black uppercase tracking-widest opacity-70 mb-0.5"></p>
+            <h2 id="banner-headline" class="text-xl font-extrabold leading-tight break-words"></h2>
+            <p id="banner-sub" class="text-xs opacity-60 mt-1"></p>
+          </div>
+        </div>
+
+        <!-- Divider -->
+        <div class="my-4 border-t border-white/5"></div>
+
+        <!-- Pass detail chips -->
+        <div class="grid grid-cols-2 gap-2">
+          <div class="chip col-span-2">
+            <div class="chip-label">Pass ID</div>
+            <div id="b-pass-id" class="chip-value font-mono text-xs break-all text-blue-400"></div>
+          </div>
+          <div class="chip">
+            <div class="chip-label">Student</div>
+            <div id="b-name" class="chip-value text-xs"></div>
+          </div>
+          <div class="chip">
+            <div class="chip-label">Enrollment</div>
+            <div id="b-enr" class="chip-value font-mono text-xs"></div>
+          </div>
+          <div class="chip">
+            <div class="chip-label">Category</div>
+            <div id="b-cat" class="chip-value text-xs"></div>
+          </div>
+          <div class="chip">
+            <div class="chip-label">Destination</div>
+            <div id="b-dest" class="chip-value text-xs"></div>
+          </div>
+          <div class="chip">
+            <div class="chip-label">Departure</div>
+            <div id="b-out" class="chip-value text-xs"></div>
+          </div>
+          <div class="chip">
+            <div class="chip-label">Expected Return</div>
+            <div id="b-in" class="chip-value text-xs"></div>
+          </div>
+          <div class="chip col-span-2">
+            <div class="chip-label">New Status</div>
+            <div id="b-status" class="chip-value capitalize"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         BOX 3 · Live Gate Activity Log
+    ══════════════════════════════════════ -->
+    <div class="bento p-5">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs font-bold uppercase tracking-widest text-gray-500">Gate Activity Log</p>
+        <button onclick="loadLogs()" class="text-xs text-blue-400 hover:text-blue-300 transition-colors">↻ Refresh</button>
+      </div>
+      <ul id="log-list" class="space-y-2">
+        <li class="text-xs text-gray-600 italic text-center py-2">Loading activity…</li>
+      </ul>
+    </div>
+
+  </main>
+
+  <!-- ══════ JavaScript ══════ -->
+  <script>
+    // ── Audio beep ────────────────────────────────────────────────────
+    function beep(freq=880, type='sine', dur=0.2) {
+      try {
+        const ctx  = new (window.AudioContext||window.webkitAudioContext)();
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+        osc.start(); osc.stop(ctx.currentTime + dur);
+      } catch(_) {}
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────
+    const $ = id => document.getElementById(id);
+    function fmtDT(str) {
+      if (!str) return '—';
+      try { return new Date(str).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}); }
+      catch { return str; }
+    }
+    function showScanErr(msg) { $('scan-err').textContent=msg; $('scan-err').classList.remove('hidden'); }
+    function clearScanErr()   { $('scan-err').classList.add('hidden'); }
+
+    // ── Scanner state ─────────────────────────────────────────────────
+    let qr        = null;
+    let scanning  = false;
+    let processing= false;
+
+    async function startScanner() {
+      clearScanErr();
+      $('idle-ph').classList.add('hidden');
+      $('vf-overlay').classList.remove('hidden');
+      $('start-btn').classList.add('hidden');
+      $('stop-btn').classList.remove('hidden');
+
+      qr = new Html5Qrcode('reader');
+      const cfg = { fps:12, qrbox:{width:220,height:220}, aspectRatio:1.0 };
+
+      const tryStart = async (facing) => {
+        await qr.start({ facingMode: facing }, cfg, onQR, ()=>{});
+        scanning = true;
+      };
+
+      try { await tryStart('environment'); }
+      catch(_) {
+        try { await tryStart('user'); }
+        catch(e) {
+          showScanErr('Camera access denied. Please allow camera permission.');
+          resetUI();
+        }
+      }
+    }
+
+    async function stopScanner() {
+      if (qr && scanning) { await qr.stop().catch(()=>{}); qr=null; scanning=false; }
+      $('vf-overlay').classList.add('hidden');
+      $('idle-ph').classList.remove('hidden');
+      resetUI();
+    }
+
+    async function resetScanner() {
+      $('banner-box').classList.add('hidden');
+      processing = false;
+      clearScanErr();
+      await startScanner();
+    }
+
+    function resetUI() {
+      $('start-btn').classList.remove('hidden');
+      $('stop-btn').classList.add('hidden');
+      $('again-btn').classList.add('hidden');
+    }
+
+    // ── QR success callback ───────────────────────────────────────────
+    async function onQR(decoded) {
+      if (processing) return;
+      processing = true;
+      await stopScanner();
+      $('stop-btn').classList.add('hidden');
+      $('again-btn').classList.remove('hidden');
+      beep(880,'sine',0.18);
+      await processScan(decoded);
+    }
+
+    // ── Core scan API call ────────────────────────────────────────────
+    async function processScan(passId) {
+      clearScanErr();
+      try {
+        const res  = await fetch(`${API_BASE_URL}/api/scan_qr`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ pass_id: passId }),
+        });
+        const json = await res.json();
+        if (res.ok && json.success) {
+          showBanner(json);
+          beep(1046,'sine',0.28);
+        } else {
+          showBannerError(json.error || 'Unknown error.', passId);
+          beep(220,'sawtooth',0.3);
+        }
+      } catch(err) {
+        showBannerError('Network error — cannot reach EC2 backend.', passId);
+        beep(220,'sawtooth',0.3);
+      }
+      loadLogs();
+    }
+
+    // ── Banner: success ───────────────────────────────────────────────
+    const BANNER_CFG = {
+      exit:   { cls:'banner-exit',   ring:'rgba(16,185,129,.5)', iconBg:'rgba(16,185,129,.2)', icon:'✅', evLabel:'— Exit Event —',   evColor:'#34d399', headColor:'#34d399' },
+      return: { cls:'banner-return', ring:'rgba(59,130,246,.5)', iconBg:'rgba(59,130,246,.2)', icon:'🏠', evLabel:'— Return Event —', evColor:'#60a5fa', headColor:'#60a5fa' },
+    };
+
+    function showBanner(json) {
+      const cfg = BANNER_CFG[json.banner_type] || BANNER_CFG.exit;
+      const b   = $('main-banner');
+      b.className = `banner ${cfg.cls}`;
+
+      $('banner-ring').style.background  = cfg.ring;
+      $('banner-icon').style.background  = cfg.iconBg;
+      $('banner-icon').textContent       = cfg.icon;
+      $('banner-ev-label').textContent   = cfg.evLabel;
+      $('banner-ev-label').style.color   = cfg.evColor;
+      $('banner-headline').textContent   = json.headline;
+      $('banner-headline').style.color   = cfg.headColor;
+      $('banner-sub').textContent        = json.sub;
+
+      const p = json.pass || {};
+      $('b-pass-id').textContent = p.pass_id   || json.pass_id || '—';
+      $('b-name').textContent    = p.student_name || '—';
+      $('b-enr').textContent     = p.enrollment_no || '—';
+      $('b-cat').textContent     = p.category    || '—';
+      $('b-dest').textContent    = p.destination || '—';
+      $('b-out').textContent     = fmtDT(p.out_time);
+      $('b-in').textContent      = fmtDT(p.in_time);
+      $('b-status').textContent  = p.status || json.event || '—';
+      $('b-status').style.color  = cfg.headColor;
+
+      revealBanner();
+    }
+
+    function showBannerError(msg, passId) {
+      const b = $('main-banner');
+      b.className = 'banner banner-error';
+
+      $('banner-ring').style.background  = 'rgba(239,68,68,.5)';
+      $('banner-icon').style.background  = 'rgba(239,68,68,.2)';
+      $('banner-icon').textContent       = '❌';
+      $('banner-ev-label').textContent   = '— Scan Error —';
+      $('banner-ev-label').style.color   = '#f87171';
+      $('banner-headline').textContent   = 'QR Code Rejected';
+      $('banner-headline').style.color   = '#f87171';
+      $('banner-sub').textContent        = msg;
+
+      $('b-pass-id').textContent = passId || '—';
+      ['b-name','b-enr','b-cat','b-dest','b-out','b-in'].forEach(id=>$(id).textContent='—');
+      $('b-status').textContent = 'INVALID'; $('b-status').style.color='#f87171';
+
+      revealBanner();
+    }
+
+    function revealBanner() {
+      const box = $('banner-box');
+      box.classList.remove('hidden','scale-in');
+      void box.offsetWidth; // force reflow
+      box.classList.add('scale-in');
+      box.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    }
+
+    // ── Manual form submit ────────────────────────────────────────────
+    $('manual-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const pid = $('manual-pid').value.trim();
+      if (!pid) return showScanErr('Please enter a Pass ID.');
+      processing = true;
+      $('manual-btn-label').innerHTML = '<span class="spin"></span>';
+      $('again-btn').classList.remove('hidden');
+      $('start-btn').classList.add('hidden');
+      await processScan(pid);
+      $('manual-btn-label').textContent = 'Verify';
+    });
+
+    // ── Activity log loader ───────────────────────────────────────────
+    const PILL_CLASS = { approved:'lp-approved', exited:'lp-exited', returned:'lp-returned' };
+
+    async function loadLogs() {
+      const list = $('log-list');
+      try {
+        const res  = await fetch(`${API_BASE_URL}/api/recent_logs`);
+        const json = await res.json();
+        if (!json.success || !json.logs.length) {
+          list.innerHTML = '<li class="text-xs text-gray-600 italic text-center py-2">No activity yet.</li>';
+          return;
+        }
+        list.innerHTML = json.logs.map(p => {
+          const pill = PILL_CLASS[p.status] || 'lp-error';
+          const time = fmtDT(p.created_at);
+          return `
+            <li class="flex items-center justify-between gap-3 rounded-xl bg-gray-900/70 border border-gray-800 px-3 py-2.5">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold text-gray-200 truncate">${p.student_name}</p>
+                <p class="text-[10px] text-gray-500 font-mono truncate">${p.pass_id}</p>
+              </div>
+              <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                <span class="log-pill ${pill}">${p.status.toUpperCase()}</span>
+                <span class="text-[9px] text-gray-600">${time}</span>
+              </div>
+            </li>`;
+        }).join('');
+      } catch(_) {
+        list.innerHTML = '<li class="text-xs text-red-500 text-center py-2">Failed to load logs.</li>';
+      }
+    }
+
+    // Load logs on page ready, then poll every 10 s
+    loadLogs();
+    setInterval(loadLogs, 10000);
+  </script>
+</body>
+</html>

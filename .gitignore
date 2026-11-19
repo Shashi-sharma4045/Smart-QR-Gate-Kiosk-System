@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# SQLite database (runtime data — do not commit)
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment secrets — NEVER commit real credentials
+.env
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+gunicorn_error.log
+gunicorn_access.log
+
+# Lambda zip artifacts
+lambda_deploy.zip
